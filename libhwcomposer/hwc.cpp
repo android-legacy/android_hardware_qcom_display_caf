@@ -28,6 +28,7 @@
 #include <sys/ioctl.h>
 #include <overlay.h>
 #include <overlayRotator.h>
+#include <fb_priv.h>
 #include <mdp_version.h>
 #include "hwc_utils.h"
 #include "hwc_fbupdate.h"
@@ -295,7 +296,8 @@ static int hwc_eventControl(struct hwc_composer_device_1* dev, int dpy,
 {
     int ret = 0;
     hwc_context_t* ctx = (hwc_context_t*)(dev);
-
+    private_module_t* m = reinterpret_cast<private_module_t*>(
+                 ctx->mFbDev->common.module);
     if(!ctx->dpyAttr[dpy].isActive) {
         ALOGE("Display is blanked - Cannot %s vsync",
               enable ? "enable" : "disable");
@@ -333,7 +335,8 @@ static int hwc_blank(struct hwc_composer_device_1* dev, int dpy, int blank)
 {
     ATRACE_CALL();
     hwc_context_t* ctx = (hwc_context_t*)(dev);
-
+    private_module_t* m = reinterpret_cast<private_module_t*>(
+         ctx->mFbDev->common.module);
     Locker::Autolock _l(ctx->mDrawLock);
     int ret = 0, value = 0;
 
@@ -364,7 +367,7 @@ static int hwc_blank(struct hwc_composer_device_1* dev, int dpy, int blank)
             }
         }
         value = blank ? FB_BLANK_POWERDOWN : FB_BLANK_UNBLANK;
-        if(ioctl(ctx->dpyAttr[dpy].fd, FBIOBLANK, value) < 0 ) {
+        if(ioctl(m->framebuffer->fd, FBIOBLANK, value) < 0 ) {
             ALOGE("%s: Failed to handle blank event(%d) for Primary!!",
                   __FUNCTION__, blank );
             return -1;
@@ -466,6 +469,8 @@ static int hwc_query(struct hwc_composer_device_1* dev,
                      int param, int* value)
 {
     hwc_context_t* ctx = (hwc_context_t*)(dev);
+    private_module_t* m = reinterpret_cast<private_module_t*>(
+         ctx->mFbDev->common.module);
     int supported = HWC_DISPLAY_PRIMARY_BIT;
 
     switch (param) {
@@ -473,6 +478,11 @@ static int hwc_query(struct hwc_composer_device_1* dev,
         // Not supported for now
         value[0] = 0;
         break;
+
+    case HWC_VSYNC_PERIOD: //Not used for hwc > 1.1
+         value[0] = m->fps;
+         ALOGI("fps: %d", value[0]);
+         break;
     case HWC_DISPLAY_TYPES_SUPPORTED:
         if(ctx->mMDP.hasOverlay)
             supported |= HWC_DISPLAY_EXTERNAL_BIT;
@@ -523,9 +533,10 @@ static int hwc_set_primary(hwc_context_t *ctx, hwc_display_contents_1_t* list) {
             }
         }
 
-        if(!Overlay::displayCommit(ctx->dpyAttr[dpy].fd)) {
-            ALOGE("%s: display commit fail for %d dpy!", __FUNCTION__, dpy);
-            ret = -1;
+
+        if (ctx->mFbDev->post(ctx->mFbDev, fbLayer->handle)) {
+             ALOGE("%s: ctx->mFbDev->post fail!", __FUNCTION__);
+             ret = -1;
         }
     }
 

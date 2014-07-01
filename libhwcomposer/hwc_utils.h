@@ -40,6 +40,7 @@
 
 //Fwrd decls
 struct hwc_context_t;
+struct framebuffer_device_t;
 
 namespace ovutils = overlay::utils;
 
@@ -374,6 +375,8 @@ int getSocIdFromSystem();
 struct hwc_context_t {
     hwc_composer_device_1_t device;
     const hwc_procs_t* proc;
+    //Framebuffer device
+    framebuffer_device_t *mFbDev;
 
     //CopyBit objects
     qhwc::CopyBit *mCopyBit[HWC_NUM_DISPLAY_TYPES];
